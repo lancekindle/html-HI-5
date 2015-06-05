@@ -37,17 +37,35 @@ var addChildren = function(qty) {
 	var child = {
 		speed: 25, // movement in pixels per second
 		direction: 39,
+		nextDirection: 39,
 		child: addChildren(qty -1)
 	};
 	
 	return child;
 };
 
+var getLastChild = function(segment) {
+	if (segment.child == undefined)
+		return segment;
+
+	return getLastChild(segment.child);
+};
+
+var setChildrenXY = function(segment) {
+	if (segment.child == undefined)
+		return;
+
+	segment.child.x = segment.x;
+	segment.child.y = segment.y;
+	setChildrenXY(segment.child);
+};
+
 
 // Game objects
 var hero = {
-	speed: 25, // movement in pixels per second
+	speed: 32, // movement in pixels per second
 	direction: 39,
+	nextDirection: 39,
 	child: addChildren(5)
 };
 var monster = {};
@@ -67,13 +85,21 @@ addEventListener("keydown", function (e) {
 
 // Reset the game when the player catches a monster
 var reset = function () {
-	hero.x = canvas.width / 2;
-	hero.y = canvas.height / 2;
+	//hero.x = canvas.width / 2;
+	//hero.y = canvas.height / 2;  // we don't want to reset hero
 
 	// Throw the monster somewhere on the screen randomly
 	monster.x = 32 + (Math.random() * (canvas.width - 64));
 	monster.y = 32 + (Math.random() * (canvas.height - 64));
 };
+
+var init = function () {
+	hero.x = canvas.width / 2;
+	hero.y = canvas.height / 2;
+	setChildrenXY(hero);
+};
+
+
 
 var follow = function (hero, x, y) {
 	prevx = hero.x;
@@ -86,20 +112,23 @@ var follow = function (hero, x, y) {
 };
 
 // Update game objects
+var updateKeyboard = function () {
+	if (38 == keysDown && hero.direction != 38 && hero.direction != 40) { // Player holding up
+		hero.nextDirection = 38;
+	}
+	else if (40 == keysDown && hero.direction != 40 && hero.direction != 38) { // Player holding down
+		hero.nextDirection = 40;
+	}
+	else if (37 == keysDown && hero.direction != 37 && hero.direction != 39) { // Player holding left
+		hero.nextDirection = 37;
+	}
+	else if (39 == keysDown && hero.direction != 39 && hero.direction != 37) { // Player holding right
+		hero.nextDirection = 39;
+	}
+};
+
 var update = function (modifier) {
-	if (38 == keysDown && hero.direction != 38) { // Player holding up
-		hero.direction = 38;
-	}
-	else if (40 == keysDown && hero.direction != 40) { // Player holding down
-		hero.direction = 40;
-	}
-	else if (37 == keysDown && hero.direction != 37) { // Player holding left
-		hero.direction = 37;
-	}
-	else if (39 == keysDown && hero.direction != 39) { // Player holding right
-		hero.direction = 39;
-	}
-	
+	hero.direction = hero.nextDirection;
 	if (hero.direction == 38) { // Player moving up
 		follow(hero, hero.x, hero.y);
 		hero.y -= hero.speed * modifier;
@@ -124,17 +153,45 @@ var update = function (modifier) {
 		&& hero.y <= (monster.y + 32)
 		&& monster.y <= (hero.y + 32)
 	) {
+		var lastChild = getLastChild(hero);
+		lastChild.child = addChildren(1);		
+
 		++monstersCaught;
 		reset();
 	}
+
+	// is "snake" touching itself?
+	collisionWithSegmentReset(hero, hero.child);
+		
 };
+
+var collisionWithSegmentReset = function (head, segment) {
+	if (segment == undefined) {
+		return; // reached end without finding anything. just exit.
+	}
+	else if ((segment.x == head.x) && (segment.y == head.y)) {
+		init();
+		reset();
+		return;
+	}
+	else {
+		collisionWithSegmentReset(head, segment.child);
+	}
+};
+
 
 // Draw everything
 var renderHero = function(hero) {
 	ctx.drawImage(heroImage, hero.x, hero.y);
 	if (hero.child != undefined){
-		hero.child.x = hero.x - 32;
-		renderHero(hero.child);
+		renderSegment(hero.child);
+	}
+};
+
+var renderSegment = function(segment) {
+	ctx.drawImage(monsterImage, segment.x, segment.y);
+	if (segment.child != undefined){
+		renderSegment(segment.child);
 	}
 };
 
@@ -165,13 +222,19 @@ var render = function () {
 var main = function () {
 	var now = Date.now();
 	var delta = now - then;
-
-	update(delta / 1000);
-	render();
-
+	var timeSinceVisualUpdate = 0;
 	then = now;
 
 	// Request to do this again ASAP
+	while (timeSinceVisualUpdate < 150) {
+		now = Date.now();
+		timeSinceVisualUpdate = now - then;
+		//console.log(timeSinceVisualUpdate);
+		updateKeyboard();
+	};
+	update(1);
+	render();
+	
 	requestAnimationFrame(main);
 };
 
@@ -181,5 +244,6 @@ requestAnimationFrame = w.requestAnimationFrame || w.webkitRequestAnimationFrame
 
 // Let's play this game!
 var then = Date.now();
+init();
 reset();
 main();
